@@ -1,0 +1,111 @@
+﻿@inject IJSRuntime JS
+@inject IClientEndpoint _clientEndpoint
+
+<div class="light-box">
+    <div class="light-box__body">
+        <button class="btn form-exit" @onclick="CloseForm" style="font-size: 0.75em;"><span class="oi oi-x"></span></button>
+        <h2 style="padding: 0.5em; font-size: 1.5em;">Select Your Face</h2>
+        <div class="img-container" @ref="imageContainer" >
+        <img src="@faceImage.FileStream" style="width: 100%;" @onload="async () => await BorderFaces()"/>
+        @for(var i = 0; i < faceRectangles.Count(); i++)
+        {
+            var j = i;
+            <div class="rectangle" @onclick="async () => await SelectFace(j)"></div>
+        }
+        </div>
+        <div class="d-flex p-2">
+            <button class="btn btn-secondary" disabled=@isConfirmButtonDisabled @onclick="async () => await ExecuteAddFace()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .rectangle {
+        border: 3px solid red;
+        position: absolute;
+    }
+
+    .img-container {
+        position: relative;
+        display: inline-block;
+        width: 500px;
+    }
+</style>
+@code {
+    ElementReference imageContainer;
+
+    [Parameter]
+    public EventCallback<List<int>> selectedFace { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> exitForm { get; set; }
+
+    [Parameter]
+    public List<FaceRectangle> faceRectangles { get; set; } = new();
+
+    [Parameter]
+    public ImageEncoded faceImage { get; set; }
+
+    List<int> targetFace;
+
+    bool isConfirmButtonDisabled = true;
+
+    private async Task BorderFaces()
+    {
+        for(int i = 0; i < faceRectangles.Count(); i++)
+        {
+            var j = i;
+            await SurroundFaceWithBorder(faceRectangles[j], j);
+        }
+    }
+
+    private async Task SurroundFaceWithBorder(FaceRectangle faceRectangle, int rectangleIndex)
+    {
+        await JS.InvokeAsync<string>("borderFace",
+                                     imageContainer,
+                                     rectangleIndex,
+                                     faceRectangle.Width, 
+                                     faceRectangle.Height, 
+                                     faceRectangle.Left, 
+                                     faceRectangle.Top);
+    }
+
+    private async Task SelectFace(int rectangleIndex)
+    {
+        await JS.InvokeAsync<string>("selectFace", imageContainer, rectangleIndex);
+        var faceRectangle = faceRectangles[rectangleIndex];
+        targetFace = new()
+            {
+                faceRectangle.Left,
+                faceRectangle.Top,
+                faceRectangle.Width,
+                faceRectangle.Height
+            };
+        isConfirmButtonDisabled = false;
+    }
+
+    private async Task ExecuteAddFace()
+    {
+        if (targetFace is not null)
+        {
+            isConfirmButtonDisabled = true;
+            await selectedFace.InvokeAsync(targetFace);
+        }
+
+    }
+
+    private async Task CloseForm()
+    {
+        await exitForm.InvokeAsync(false);
+    }
+
+    private string ConfirmButtonIsValid()
+    {
+        if (targetFace is not null)
+        {
+            return "";
+        }
+        return "disabled";
+    }
+
+}

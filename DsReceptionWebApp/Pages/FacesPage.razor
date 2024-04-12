@@ -1,0 +1,143 @@
+﻿@page "/faces"
+@inject IClientEndpoint _clientEndpoint
+@inject IFaceEndpoint _faceEndpoint
+@inject ILocalStorageService _localStorage
+@inject IConfiguration _config
+@inject ErrorStore _errorStore
+
+@if (photos is not null)
+{
+    <div class="page-body">
+        <div class="page-heading">
+            <div class="page-heading__group">
+                <h3 style="color: var(--main-color); font-size: 1em;">Your Faces For Identification</h3>
+
+
+                <InputFile OnChange="AddPhotoAsync" class="d-none" id="image-file"></InputFile>
+                <label for="image-file">
+                    <div class="ds-btn btn-secondary ml-5">
+                        <p style="color: white">Add Face</p>
+                        <ion-icon class="ml-2" name="add-circle-outline"></ion-icon>
+                    </div>
+                </label>
+                <div class="ds-btn btn-secondary ml-3" @onclick="TrainFaces">
+                    <p style="color: white">Train Faces</p>
+                    @if (trainingStatus is null || trainingStatus.StatusCode == System.Net.HttpStatusCode.OK)
+                    {
+                        <ion-icon class="ml-2" name="settings-outline"></ion-icon>
+                    }
+                    else if (trainingStatus.StatusCode == System.Net.HttpStatusCode.Processing)
+                    {
+                        <div class="spinner-border text-light ml-2" role="status">
+                            <span class="sr-only">Loading...</span>
+                        </div>
+                    }
+
+                </div>
+                <div class="ds-btn btn-secondary ml-4" @onclick="() => confirmationFormVisible = true">
+                    <p style="color: white">Clear Faces</p>
+                    <ion-icon class="ml-2" name="close-circle-outline"></ion-icon>
+                </div>
+                <p class="pl-3">@trainingStatus.Messages.First()</p>
+            </div>
+            <h3 style="color: var(--main-color); font-size: 0.8em">Faces Allowed @photos.Count/6</h3>
+        </div>
+        <div class="page-main">
+            <div class="page-gallery">
+
+                @foreach (var photo in photos)
+                {
+                    <div class="gallery__container">
+                        <img class="gallery__image" src="@photo.FileStream" alt="Alternate Text" />
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    @if (confirmationFormVisible is true)
+    {
+        <ConfirmationForm concernQuestion="Are you sure you want to delete all faces?" 
+                          responseCallback="async e => 
+                                            { 
+                                                if (e is true)
+                                                {
+                                                    await ClearPhotosAsync();
+                                                }
+                                                confirmationFormVisible = false;
+                                            }"></ConfirmationForm>
+    }
+}
+@code {
+    public bool confirmationFormVisible { get; set; }
+    public List<ImageEncoded> photos;
+    private List<IBrowserFile> imageFiles;
+    private CQRSResponse trainingStatus = new() { Messages = new() { "" } };
+
+    protected async override Task OnInitializedAsync()
+    {
+        var token = await _localStorage.GetItemAsync<string>(_config["TokenApi:Auth"]);
+        if (token is not null)
+        {
+            photos = await _clientEndpoint.GetImagesOfClient(token);
+        }
+    }
+
+    private async Task AddPhotoAsync(InputFileChangeEventArgs inputFileChange)
+    {
+        if (photos.Count < 6)
+        {
+            try
+            {
+                imageFiles = inputFileChange.GetMultipleFiles().ToList();
+                List<ImageEncoded> selectedImages = new();
+                foreach (var imageFile in imageFiles)
+                {
+                    ImageEncoded image = new();
+                    image.FileName = imageFile.Name;
+                    var buffer = new byte[imageFile.Size];
+                    await imageFile.OpenReadStream(maxAllowedSize: int.MaxValue).ReadAsync(buffer);
+                    image.FileStream = $"data:image/png;base64,{Convert.ToBase64String(buffer)}";
+                    selectedImages.Add(image);
+
+                }
+                var apiResult = await _clientEndpoint.PostImageOfClientWithFile(imageFiles);
+                if (apiResult.StatusCode == System.Net.HttpStatusCode.OK)
+                {
+                    photos.AddRange(selectedImages);
+                }
+                else if (apiResult.StatusCode != System.Net.HttpStatusCode.OK)
+                {
+                    _errorStore.NewMessage(apiResult.Messages.First());
+                }
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                _errorStore.NewMessage(ex.Message);
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            _errorStore.NewMessage("You cannot exceed six faces for identification.");
+        }
+    }
+
+    private async Task TrainFaces()
+    {
+        trainingStatus = new() { StatusCode = System.Net.HttpStatusCode.Processing, Messages = new() { "" } };
+        trainingStatus = await _faceEndpoint.TrainFaces();
+        StateHasChanged();
+    }
+
+    private async Task ClearPhotosAsync()
+    {
+        if (photos.Any())
+        {
+            var token = await _localStorage.GetItemAsync<string>(_config["TokenApi:Auth"]);
+            await _clientEndpoint.DeleteImagesOfClient(token);
+            photos.Clear();
+            StateHasChanged();
+        }
+    }
+}

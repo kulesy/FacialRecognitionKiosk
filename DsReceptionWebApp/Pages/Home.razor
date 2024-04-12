@@ -1,0 +1,36 @@
+﻿@page "/home"
+@inject IJSRuntime JS
+@inject IFaceEndpoint _faceEndpoint
+
+<div class="page-hero">
+    <div class="logo">
+        <img src="../images/ds-logo.PNG" class="logo__image" />
+    </div>
+</div>
+
+
+
+
+@code {
+    ElementReference imageContainer;
+    ImageEncoded faceImage;
+    List<FaceRectangle> faceRectangles;
+
+    bool isFaceSelectionVisible;
+
+    private async Task AddPhotoAsync(InputFileChangeEventArgs inputFileChange)
+    {
+        faceImage = new();
+        var imageFiles = inputFileChange.GetMultipleFiles().ToList();
+        var imageFile = imageFiles.First();
+        faceImage.FileName = imageFile.Name;
+        var buffer = new byte[imageFile.Size];
+        await imageFile.OpenReadStream(maxAllowedSize: int.MaxValue).ReadAsync(buffer);
+        faceImage.FileStream = $"data:image/png;base64,{Convert.ToBase64String(buffer)}";
+
+        var detectedFaces = await _faceEndpoint.DetectAllFaces(imageFiles);
+        faceRectangles = detectedFaces.Select(e => e.FaceRectangle).ToList();
+        isFaceSelectionVisible = true;
+        StateHasChanged();
+    }
+}

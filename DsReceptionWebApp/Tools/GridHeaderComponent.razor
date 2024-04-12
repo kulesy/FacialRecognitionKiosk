@@ -1,0 +1,53 @@
+﻿@typeparam TItem
+@if (memberInfos != null && memberInfos.Length > 0)
+{
+    
+    @foreach (var member in memberInfos)
+    {
+        @if (member.MemberType == MemberTypes.Property && ColumnsToExcludeCSV.Contains(member.Name, StringComparison.OrdinalIgnoreCase) == false)
+        {
+            <th>
+                @if(GetDisplayName(member) == null)
+                {
+                    @member.Name;
+                }
+                else
+                {
+                    @GetDisplayName(member);
+                }
+            </th>
+        }
+    }
+        
+}
+@code {
+
+    MemberInfo[] memberInfos;
+    Type typeOfItem;
+    [Parameter]
+    public TItem Item { get; set; }
+    [Parameter]
+    public string ColumnsToExcludeCSV { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Item != null)
+        {
+            typeOfItem = Item.GetType();
+            memberInfos = typeOfItem.GetMembers();
+        }
+
+    }
+
+    public string GetDisplayName(MemberInfo member)
+    {
+        var attr = member.GetCustomAttribute<DisplayAttribute>(false);
+        string display = null;
+        if (attr != null)
+        {
+            display = attr.Name ?? member.Name;
+        }
+        return display;
+    }
+
+}

@@ -1,0 +1,27 @@
+.auth {
+    height: 100vh;
+    font-size: 2em;
+    display: grid;
+    grid-template-areas: 'sidebar topbar'
+        'sidebar page';
+    grid-template-columns: 2.25em 1fr;
+    grid-template-rows: 1.75em calc(100% - 1.75em);
+}
+
+.auth__sidebar {
+    background-color: var(--main-color);
+    grid-area: sidebar;
+}
+
+.auth__top-bar {
+    background: var(--secondary-color);
+    background-image: url("../images/topbar-background.png");
+    background-size: cover;
+    grid-area: topbar;
+}
+
+.auth__page {
+    background-color: var(--page-color);
+    grid-area: page;
+}
+

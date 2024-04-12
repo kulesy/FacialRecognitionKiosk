@@ -1,0 +1,50 @@
+﻿@implements IDisposable
+@inherits LayoutComponentBase
+
+@inject ISpeechEndpoint _speechEndPoint
+@inject SpeechStore _speechStore
+@inject NavigationManager _navManager
+
+<div class="unauth speech">
+    <div class="align-items-center">
+        <h1 style="font-weight: 300">@Message</h1>
+    </div>
+</div>
+
+<style>
+    .speech {
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 0;
+        bottom: 0;
+    }
+</style>
+
+@code {
+
+    string Message;
+    [Parameter]
+    public List<string> messageList { get; set; }
+
+    protected async override Task OnInitializedAsync()
+    {
+        foreach(var message in messageList)
+        {
+            Message = message;
+            StateHasChanged();
+            await _speechEndPoint.TextToSpeech(message);
+        }
+        _speechStore.ClearMessage();
+    }
+
+    public void UpdateView()
+    {
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _speechStore.RemoveStateChangeListeners(UpdateView);
+    }
+}

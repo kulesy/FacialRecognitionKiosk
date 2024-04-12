@@ -1,0 +1,93 @@
+﻿.body {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    background: white;
+    height: 100%;
+    position: relative;
+}
+
+.sign-in, .sign-up {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    padding-bottom: 3em;
+    text-align: center;
+    transition: transform 0.4s ease-in-out;
+}
+
+.sign-in__body, .sign-up__body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    text-align: center;
+    opacity: 0;
+}
+
+.sign-in {
+    width: 55%
+}
+
+.sign-up {
+    background-color: var(--secondary-color);
+    background-image: url("../images/sign-background.png");
+    background-size: cover;
+    width: 45%;
+}
+
+.sign-in__face-id {
+    background: var(--main-color);
+    color: white;
+    padding: 0.15em;
+    border-radius: 1000em;
+    display: flex;
+    font-size: .75em;
+    width: 7em;
+    transition: background ease .5s;
+}
+
+.sign-in__face-id:hover, .sign-in__face-id:focus,
+.sign-in__face-id__icon:hover, .sign-in__face-id__icon:focus {
+    transition: background ease .5s;
+    cursor: pointer;
+}
+
+.sign-in__face-id:hover, .sign-in__face-id:focus {
+    background-color: var(--accent-color);
+}
+
+.sign-in__face-id__icon__image {
+    font-size: 1.2em;
+    padding: .2em;
+    border-radius: 1em;
+    border: 2px solid var(--white);
+}
+
+
+.sign-in__face-id__text {
+    margin: auto;
+    font-size: .9em;
+}
+
+.sign-in__or {
+    position: relative
+}
+
+.sign-in__or::before, .sign-in__or::after {
+    content: '';
+    position: absolute;
+    width: 5em;
+    height: 0.1em;
+    background: var(--main-color);
+    top: 50%
+}
+
+.sign-in__or::before {
+    left: 20px;
+}
+
+.sign-in__or::after {
+    right: 20px;
+}

@@ -1,0 +1,29 @@
+﻿@typeparam IType
+
+
+@foreach (var item in Items)
+{
+    @if (this.ItemToEdit == null || item.GetHashCode() != ItemToEdit.GetHashCode())
+    {
+        @Row(item)
+    }
+    else
+    {
+        @EditTemplate(ItemToEdit)
+    }
+}
+
+
+
+
+
+@code {
+    [Parameter]
+    public RenderFragment<IType> Row { get; set; }
+    [Parameter]
+    public List<IType> Items { get; set; }
+    [Parameter]
+    public RenderFragment<IType> EditTemplate { get; set; }
+    public IType ItemToEdit { get; set; }
+
+}

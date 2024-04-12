@@ -1,0 +1,14 @@
+﻿.user-navigation {
+    height: 100%;
+    display: flex;
+    justify-content: end;
+    align-items: center;
+}
+
+.user-welcome {
+    width: 100%;
+    display: flex;
+    justify-content: end;
+    align-items: center;
+    color: white;
+}

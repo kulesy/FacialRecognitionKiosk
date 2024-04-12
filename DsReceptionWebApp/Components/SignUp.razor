@@ -1,0 +1,129 @@
+﻿@page "/signup"
+@inject IConfiguration _config
+@inject IFaceEndpoint _faceEndPoint
+@inject IClientEndpoint _clientEndPoint
+@inject ErrorStore _errorStore
+@inject IAuthenticationService _authService
+@inject IJSRuntime JS
+@inject NavigationManager _navManager
+
+<div class="unauth__content">
+    <div class="logo">
+        <img src="../images/ds-logo.PNG" class="logo__image" />
+    </div>
+    <div class="body">
+        <section class="sign-in" @ref="signIn">
+            <div class="sign-in__body">
+                <h1 style="color: white">Already with us?</h1>
+                <h3 class="mt-3 mx-5" style="color: white">If you already have a Digital Stock Account just sign in below.</h3>
+                <button type="submit" class="ds-white-button btn mt-4" @onclick="async () => { await SignInExecuteAsync(); }"><h2>Sign In</h2></button>
+            </div>
+        </section>
+        <section class="sign-up" @ref="signUp">
+            <div class="sign-up__body">
+                <h1 style="color: var(--main-color);">Register Your <br /> Account</h1>
+                <h3 class="mt-3" style="color: var(--main-color);">Don’t worry its free!</h3>
+                <EditForm Model="registrationUser" OnValidSubmit="RegisterExecuteAsync">
+                    <DataAnnotationsValidator />
+                    <div class="sign-up__form mt-3 mx-4">
+                        <div class="ds-form-group">
+                            <label for="firstName" class="sr-only">First Name</label>
+                            <InputText id="firstName" class="form-control ds-input sign-up__ds-input" placeholder="First Name"
+                                        @bind-Value="registrationUser.FirstName" />
+                        </div>
+                        <div class="ds-form-group">
+                            <label for="lastName" class="sr-only">Last Name</label>
+                            <InputText id="lastName" class="form-control ds-input sign-up__ds-input" placeholder="Last Name"
+                                        @bind-Value="registrationUser.LastName" />
+                        </div>
+                        <div class="ds-form-group">
+                            <label for="email" class="sr-only">Email</label>
+                            <InputText type="email" id="email" class="form-control ds-input sign-up__ds-input" placeholder="Email"
+                                        @bind-Value="registrationUser.Email" />
+                        </div>
+                        <div class="ds-form-group">
+                            <label for="company" class="sr-only">Company</label>
+                            <InputText id="company" class="form-control ds-input sign-up__ds-input" placeholder="Company"
+                                        @bind-Value="registrationUser.Company" />
+                        </div>
+                        <div class="ds-form-group">
+                            <label for="password" class="sr-only">Password</label>
+                            <InputText type="password" id="password" class="form-control ds-input sign-up__ds-input" placeholder="Password"
+                                        @bind-Value="registrationUser.Password" />
+                        </div>
+                        <div class="ds-form-group">
+                            <label for="confirmPassword" class="sr-only">Confirm Password</label>
+                            <InputText type="password" id="confirmPassword" class="form-control ds-input sign-up__ds-input"
+                                        @bind-Value="registrationUser.ConfirmPassword" placeholder="Confirm Password" />
+                        </div>
+
+                        <div class="sign-up__tc">
+                            <InputCheckbox @bind-Value="registrationUser.EnabledFaceIdentification" />
+                            <a class="sign-up__tc-text" href="">Enable Face Identification</a>
+                        </div>
+
+                        <div class="sign-up__tc mb-2">
+                            <InputCheckbox @bind-Value="registrationUser.AgreeTerms" />
+                            <a class="sign-up__tc-text" href="">I have read the Terms & Conditions</a>
+                        </div>
+                        <ValidationMessage For="@(() => registrationUser.AgreeTerms)" class="mt-2" />
+                        <button type="submit" class="ds-blue-button btn" disabled=@isSignUpButtonDisabled><h2>Sign Up</h2></button>
+                    </div>
+                </EditForm>
+            </div>
+        </section>
+    </div>
+</div>
+
+
+@code {
+    [Parameter]
+    public EventCallback<string> focusCallBack { get; set; }  
+
+    private RegisterUserModel registrationUser = new();
+
+    private List<IBrowserFile> imageFiles;
+    private List<Client> clients;
+
+    bool isSignUpButtonDisabled = false; 
+
+    private ElementReference signIn;
+    private ElementReference signUp;
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender == true)
+        {
+            await JS.InvokeAsync<string>("opacityToggle", signUp, signIn);
+        }
+    }
+
+    private async Task RegisterExecuteAsync()
+    {
+        try
+        {
+            isSignUpButtonDisabled = true;
+            var registerResult = await _clientEndPoint.RegisterAsync(registrationUser);
+            if (registerResult.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                await SignInExecuteAsync(); 
+            }
+            else if (registerResult.StatusCode != System.Net.HttpStatusCode.OK)
+            {
+                isSignUpButtonDisabled = false;
+                var message = String.Join(' ', registerResult.Messages);
+                _errorStore.NewMessage(message);
+            }   
+        }
+        catch(Exception ex)
+        {
+            _errorStore.NewMessage(ex.Message);
+        }
+    }
+    private async Task SignInExecuteAsync()
+    {
+        await JS.InvokeAsync<string>("switchFormFocus", signUp, signIn);
+        await Task.Delay(400);
+        _navManager.NavigateTo("signIn");
+    }
+}

@@ -1,0 +1,72 @@
+﻿@inject ErrorStore _errorStore
+<div class="light-box">
+    <div class="card p-4 align-items-center">
+        <button class="btn form-exit" @onclick="() => returnedLogins.InvokeAsync(currentLogins)"><span class="oi oi-x"></span></button>
+        <h3 class="mb-2">Filter Form</h3>
+        <EditForm Model="filterModel" OnValidSubmit="FilterLoginsAsync" class="form">
+            <div class="form">
+                <div class="form-group pt-2">
+                    <label for="startDate">Start Date</label>
+                    <div class="input-container">
+                        <InputDate TValue="DateTime" type="date" class="form-control"
+                                   id="startDate" @bind-Value="filterModel.StartDate" />
+                    </div>
+
+                </div>
+                <div class="form-group">
+                    <label for="endDate">End Date</label>
+                    <div class="input-container">
+                        <InputDate TValue="DateTime" type="date" class="form-control"
+                                   id="endDate" @bind-Value="filterModel.EndDate"
+                                    min="@String.Format("{0:yyyy-MM-dd}", filterModel.StartDate)"/>
+                    </div>
+                </div>
+                <div class="d-flex flex-row">
+                    <div class="form-group">
+                        <label for="clientName">Client Name</label>
+                        <InputText class="form-control"
+                                   id="clientName" @bind-Value="filterModel.ClientName" />
+                    </div>
+                </div>
+                <button type="submit" class="ds-btn"><p>Search Availability</p></button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+<style>
+    label {
+        font-size: .5em;
+    }
+</style>
+@code {
+
+    [Parameter]
+    public List<Login> currentLogins { get; set; }
+
+    [Parameter]
+    public EventCallback<List<Login>> returnedLogins { get; set; }
+
+    private FilterModel filterModel = new();
+
+    private async Task FilterLoginsAsync()
+    {
+        var filteredLogins = currentLogins.Where<Login>(e =>
+        (filterModel.StartDate.Date <= e.SignInDate.Date && filterModel.EndDate.Date >= e.SignInDate.Date)
+        ).ToList();
+
+        if (filterModel.ClientName is not null && filteredLogins is not null)
+        {
+            var clientName = filterModel.ClientName.ToLower();
+            filteredLogins = filteredLogins.Where<Login>(e => e.FullName.ToLower().Contains(clientName)).ToList();
+        }
+        if (filteredLogins.Count > 0)
+        {
+            await returnedLogins.InvokeAsync(filteredLogins);
+        }
+        else if (filteredLogins.Count == 0)
+        {
+            _errorStore.NewMessage("No logins available, please try again.");
+        }
+    }
+}

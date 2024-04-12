@@ -1,0 +1,31 @@
+﻿<div class="light-box">
+    <div class="card p-4 align-items-center" >
+        <p class="mb-2">@concernQuestion</p>
+        <div class="d-flex">
+            <button class="btn btn-success" @onclick="ExecuteYesAsync" disabled=@isYesButtonDisabled>Yes</button>
+            <button class="btn btn-danger ml-2" @onclick="ExecuteNoAsync" disabled=@isNoButtonDisabled>No</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string concernQuestion { get; set; }
+    [Parameter]
+    public EventCallback<bool> responseCallback { get; set; }
+
+    bool isYesButtonDisabled = false;
+    bool isNoButtonDisabled = false;
+
+    private async Task ExecuteYesAsync()
+    {
+        isYesButtonDisabled = true;
+        await responseCallback.InvokeAsync(true);
+    }
+    
+    private async Task ExecuteNoAsync()
+    {
+        isNoButtonDisabled = true;
+        await responseCallback.InvokeAsync(false);
+    }
+}

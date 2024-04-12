@@ -1,0 +1,190 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject IClientEndpoint _clientEndpoint
+@inject IFaceEndpoint _faceEndpoint
+
+@inject SpeechStore _speechStore
+@inject ErrorStore _errorStore
+
+@inject IImageCache _imageCache
+@inject IFacesCache _facesCache
+
+@inject NavigationManager _navManager
+@inject ILocalStorageService _localStorage
+
+<AuthorizeView>
+    <Authorized>
+        @if (_navManager.Uri.Contains("signIn"))
+        {
+            <div class="spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="auth">
+                <div class="auth__sidebar">
+                    <SideBar></SideBar>
+                </div>
+                <div class="auth__top-bar">
+                    <Account FirstName="@firstName"></Account>
+                </div>
+
+                <div class="auth__page">
+                    @Body
+                </div>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauth">
+            @Body
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@if (errorMessage is not null)
+{
+    <div class="blazor-error-ui">
+        @errorMessage
+        <a class="dismiss" @onclick="() => { _errorStore.ClearMessage(); }">🗙</a>
+    </div>
+}
+
+@if (speechMessageList is not null)
+{
+    <SpeechMessage messageList="speechMessageList"/>
+}
+
+@if (isFaceSelectionVisible)
+{
+    <FaceSelection faceImage="faceImage" 
+                   faceRectangles="faceRectangles" 
+                   selectedFace="async e => await FaceSelect(e)" 
+                   exitForm="e => { isFaceSelectionVisible = e; StateHasChanged(); }"></FaceSelection>
+}
+
+@code
+{
+    string firstName;
+    string errorMessage;
+
+    ImageEncoded faceImage;
+    List<FaceRectangle> faceRectangles;
+
+    List<string> speechMessageList;
+
+    bool isFaceSelectionVisible = false;
+
+    [CascadingParameter]
+    public Task<AuthenticationState> AuthState { get; set; }
+
+    Client user;
+
+    protected async override Task OnInitializedAsync()
+    {
+        var authState = await AuthState;
+
+        AddListeners();
+        DetermineAuthenticatedUri(authState);
+
+        var token = await _localStorage.GetItemAsync<string>("authToken");
+        if (authState.User.Identity.IsAuthenticated)
+        {
+            user = await _clientEndpoint.GetUser(token);    
+            firstName = user.FirstName;
+
+            faceImage = await _imageCache.GetCachedImageAsync();
+            var detectedFaces = await _facesCache.GetCachedFacesAsync();
+            if (detectedFaces != null)
+            {
+                faceRectangles = detectedFaces.Select(e => e.FaceRectangle).ToList();
+            }
+            if (faceImage != null)
+            {
+                if (faceRectangles?.Count() > 0)
+                {
+                    isFaceSelectionVisible = true;
+                }
+                else if (faceRectangles == null && user.EnabledFaceIdentification)
+                {
+                    await _clientEndpoint.PostImageOfClientWithImage(faceImage);
+                    await _faceEndpoint.TrainFaces();
+                    await _imageCache.DeleteCacheAsync();
+                }
+            }
+        }
+        StateHasChanged();
+    }
+
+    public void AddListeners()
+    {
+        _speechStore.AddStateChangeListeners(() =>
+        {
+            speechMessageList = _speechStore.GetState().Message;
+            StateHasChanged();
+        });
+        _errorStore.AddStateChangeListeners(() =>
+        {
+            errorMessage = _errorStore.GetState().Message;
+            StateHasChanged();
+        });
+    }
+
+
+    private async Task FaceSelect(List<int> targetFace)
+    {
+        var detectedFaces = await _facesCache.GetCachedFacesAsync();
+        var detectedFace = detectedFaces.Where(e => e.FaceRectangle.Left== targetFace[0] &&
+                                                    e.FaceRectangle.Top == targetFace[1] &&
+                                                    e.FaceRectangle.Width == targetFace[2] &&
+                                                    e.FaceRectangle.Height == targetFace[3]).First();
+        if (user.EnabledFaceIdentification)
+        {
+            var result = await _clientEndpoint.PostImageOfClientWithImage(faceImage, targetFace);
+            if (result.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                await _faceEndpoint.TrainFaces();
+                detectedFaces.Remove(detectedFace);
+                await _facesCache.CreateCacheAsync(detectedFaces);
+            }
+            var cachedFaces = await _facesCache.GetCachedFacesAsync();
+            if (cachedFaces.Any() == false)
+            {
+                await _imageCache.DeleteCacheAsync();
+                await _facesCache.DeleteCacheAsync();
+            }
+        }
+        else if (user.EnabledFaceIdentification == false)
+        {
+            detectedFaces.Remove(detectedFace);
+            await _facesCache.CreateCacheAsync(detectedFaces);
+        }
+        isFaceSelectionVisible = false;
+    }
+
+    private void DetermineAuthenticatedUri(AuthenticationState authState)
+    {
+        if (authState.User.Identity.IsAuthenticated)
+        {
+            _navManager.NavigateTo("home");
+        }
+        else if (authState.User.Identity.IsAuthenticated == false)
+        {
+            _navManager.NavigateTo("signIn");
+        }
+    }
+
+    public void UpdateView()
+    {
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _speechStore.RemoveStateChangeListeners(UpdateView);
+        _errorStore.RemoveStateChangeListeners(UpdateView);
+    }
+}

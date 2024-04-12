@@ -1,0 +1,218 @@
+﻿@page "/signIn"
+@inject IConfiguration _config
+@inject IFaceEndpoint _faceEndPoint
+
+@inject SpeechStore _speechStore
+@inject ErrorStore _errorStore
+
+@inject IImageCache _imageCache
+@inject IFacesCache _facesCache
+
+@inject IAuthenticationService _authService
+@inject IJSRuntime JS
+@inject NavigationManager _navManager
+
+<div class="unauth__content">
+    <div class="logo">
+        <img src="../images/ds-logo.PNG" class="logo__image" />
+    </div>
+    <div class="body">
+        <section class="sign-in" @ref="signIn">
+            <div class="sign-in__body">
+                <h1 style="color: var(--main-color);">Login with</h1>
+                <InputFile OnChange="OnFileChangeAsync" multiple class="d-none" id="image-file"></InputFile>
+                <label for="image-file" class="sign-in__face-id mt-4">
+                    <ion-icon name="camera-outline" class="sign-in__face-id__icon__image"></ion-icon>
+                    <h2 class="sign-in__face-id__text">Face ID</h2>
+                </label>
+                <p class="sign-in__or mt-4" style="color: var(--main-color);">or</p>
+
+                <h3 class="mt-4" style="color: var(--main-color);">Your Digital Stock Account</h3>
+                <EditForm Model="authUser" OnValidSubmit="LoginThroughFormExecuteAsync">
+                    <DataAnnotationsValidator />
+                    <div class="sign-in_form mt-3">
+                        <div class="w-30">
+                            <label for="email" class="sr-only">Email</label>
+                            <InputText id="email" class="form-control ds-input" placeholder="Email" @bind-Value="authUser.Email" />
+                        </div>
+                        <div class="w-30 mt-4">
+                            <label for="password" class="sr-only">Password</label>
+                            <InputText type="password" id="password" class="form-control ds-input" @bind-Value="authUser.Password" placeholder="Password" />
+                        </div>
+                        <a style="text-decoration: underline; color: var(--main-color);" href="">Forgot your password?</a>
+                        <div class="w-10 mt-2">
+                            <button type="submit" class="ds-blue-button btn" disabled=@isSignInButtonDisabled><h2>Sign In</h2></button>
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </section>
+        <section class="sign-up" @ref="signUp">
+            <div class="sign-up__body">
+                <h1 style="color: white">Welcome to <br /> Digital Stock!</h1>
+                <h3 class="mt-3 mx-5" style="color: white">Kia Ora! Come join us to gain access to our facilities.</h3>
+                <button type="submit" 
+                        class="ds-white-button btn mt-4"
+                        @onclick="async () => { await SignUpExecuteAsync(); }"><h2>Sign Up</h2></button>
+            </div>
+        </section>
+    </div>
+</div>
+
+
+@code {
+    [Parameter]
+    public EventCallback<string> focusCallBack { get; set; }     
+
+    private AuthenticationUserModel authUser = new();
+
+    private List<IBrowserFile> imageFiles;
+    private List<Client> clients;
+
+    public bool faceSelectionIsVisible { get; set; }
+    bool isSignInButtonDisabled = false; 
+
+    private ElementReference signIn;
+    private ElementReference signUp;
+
+    protected async override Task OnInitializedAsync()
+    {
+        await CheckCacheExpiry();
+    }
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender == true)
+        {
+            await JS.InvokeAsync<string>("opacityToggle", signUp, signIn);
+        }
+    }
+
+    private async Task OnFileChangeAsync(InputFileChangeEventArgs inputFileChange)
+    {
+        imageFiles = inputFileChange.GetMultipleFiles().ToList();
+        var image = await ConvertFileToImage(imageFiles);
+        var detectedFaces = await _faceEndPoint.DetectAllFaces(imageFiles);
+        if (detectedFaces is null)
+        {
+            _errorStore.NewMessage("Image must be of a person or group of people");
+        }
+        else
+        {
+            var clientFaces = await _faceEndPoint.DetectAllClientFaces(detectedFaces);
+            var clientInImage = await _faceEndPoint.DetectAllClients(clientFaces);
+            var unknownFaces = GetUnknownDetectedFaces(detectedFaces, clientFaces);
+
+            if (clientInImage.Count == 1 && unknownFaces.Count() == 0)
+            {
+                await ReadSpeech(clientInImage);
+                await LoginThroughFaceExecuteAsync(clientInImage.First());
+            }
+
+            else if ((clientInImage.Count == 1 && unknownFaces.Count() == 1) || clientInImage.Count > 1 || unknownFaces.Count() > 1) 
+            {
+                _speechStore.NewMessage(_faceEndPoint.DetectionMessage(clientInImage, unknownFaces.Count()));
+                await _imageCache.CreateCacheAsync(image);
+                await _facesCache.CreateCacheAsync(unknownFaces);
+            }
+
+            else if (clientInImage?.Count == 0 && unknownFaces.Count() == 1)
+            {
+                await SignUpExecuteAsync();
+                await _imageCache.CreateCacheAsync(image);
+                _speechStore.NewMessage(_faceEndPoint.DetectionMessage(clientInImage, unknownFaces.Count()));
+            }
+            else if (clientInImage?.Count == 0 && unknownFaces.Count() == 0)
+            {
+                _errorStore.NewMessage("An error occured while detecting faces");
+            }
+        }
+
+    }
+
+    private async Task LoginThroughFormExecuteAsync()
+    {
+        try 
+        {
+            isSignInButtonDisabled = true;
+            await _authService.LoginThroughForm(authUser);
+            _navManager.NavigateTo("/", forceLoad:true);
+        }
+        catch (Exception ex)
+        {
+            isSignInButtonDisabled = false;
+            _errorStore.NewMessage(ex.Message);
+        }
+    }
+
+    private async Task LoginThroughFaceExecuteAsync(Client user)
+    {
+        try 
+        {
+            await _authService.LoginThroughFace(user);
+            _navManager.NavigateTo("/", forceLoad:true);
+        }
+        catch (Exception ex)
+        {
+
+            _errorStore.NewMessage(ex.Message);
+        }
+    }
+
+    private async Task SignUpExecuteAsync()
+    {
+        await JS.InvokeAsync<string>("switchFormFocus", signUp, signIn);
+        await Task.Delay(400);
+        _navManager.NavigateTo("signUp");
+    }
+
+    private async Task<ImageEncoded> ConvertFileToImage(List<IBrowserFile> imageFiles)
+    {
+        var imageFile = imageFiles.FirstOrDefault();
+        ImageEncoded image = new();
+        image.FileName = imageFile.Name;
+        var buffer = new byte[imageFile.Size];
+        var stream = imageFile.OpenReadStream(maxAllowedSize: int.MaxValue);
+        await stream.ReadAsync(buffer);
+        image.FileStream = $"data:image/png;base64,{Convert.ToBase64String(buffer)}";
+        return image;
+    }
+
+    private async Task ReadSpeech(List<Client> clients)
+    {
+        _speechStore.NewMessage(_faceEndPoint.DetectionMessage(clients));
+        while (_speechStore.GetState().Message != null)
+        {
+            await Task.Delay(1000);
+        }
+    }
+
+    private List<DetectedFace> GetUnknownDetectedFaces(List<DetectedFace> detectedFaces, List<IdentifyResult> identifyResults)
+    {
+        List<DetectedFace> clientDetectedFaces = new(); 
+        foreach(var detectedFace in detectedFaces)
+        {
+            if (identifyResults.Where(e => e.FaceId == detectedFace.FaceId).Count() == 0)
+            {
+                clientDetectedFaces.Add(detectedFace);
+            }
+        }
+        return clientDetectedFaces;
+    }
+
+    private async Task CheckCacheExpiry()
+    {
+        DateTime? cacheDate = await _imageCache.GetCachedDateAsync();
+        double timeTaken = 0;
+
+        if (cacheDate is not null)
+        {
+            timeTaken = DateTime.UtcNow.Subtract((DateTime)cacheDate).TotalMinutes;
+        }
+        if (timeTaken >= 5)
+        {
+            await _imageCache.DeleteCacheAsync();
+            await _facesCache.DeleteCacheAsync();
+        }
+    }
+}

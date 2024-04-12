@@ -1,0 +1,24 @@
+﻿@if (boolIsChecked)
+{
+    <input type="checkbox" @onclick="InvokeChange" style="width:2em;" checked />
+}
+
+else
+{
+    <input type="checkbox" style="width:2em;" @onclick="InvokeChange"/>
+}
+
+@code {
+
+    [Parameter]
+    public EventCallback<bool> boolIsCheckedChanged { get; set; }
+
+    [Parameter]
+    public bool boolIsChecked { get; set; }
+
+    private void InvokeChange()
+    {
+        boolIsChecked = !boolIsChecked;
+        boolIsCheckedChanged.InvokeAsync(boolIsChecked);
+    }
+}

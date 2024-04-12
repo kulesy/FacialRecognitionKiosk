@@ -1,0 +1,207 @@
+﻿@page "/logs"
+@inject IClientEndpoint _clientEndpoint
+@inject IJSRuntime JS
+
+
+    <div class="page-body">
+        <div class="page-heading"><h1 style="font-size: 1.1em; font-weight: 300;">Sign Ins</h1></div>
+        <ul class="page-list" @ref="tabList">
+            <li class="page-list__item list-toggle" @onclick="async () => await ChangeTabs(0)"><h3>Today</h3></li>
+            <li class="page-list__item" @onclick="async () => await ChangeTabs(1)"><h3>Last Week</h3></li>
+            <li class="page-list__item" @onclick="async () => await ChangeTabs(2)"><h3>Last Month</h3></li>
+            <li class="page-list__item" @onclick="async () => await ChangeTabs(3)"><h3>Last Year</h3></li>
+            <li class="page-list__item" @onclick="async () => await ChangeTabs(4)"><h3>All</h3></li>
+        </ul>
+        <div class="page-content">
+            @if (currentLogins.Count > 0)
+            {
+                <table>
+                    <thead>
+                        <tr>
+                            <GridHeaderComponent ColumnsToExcludeCSV="Clients, ClientId" Item="currentLogins[0]"></GridHeaderComponent>
+                            <th>
+                                <button type="submit" class="ds-blue-button btn" style="font-size: 1.25em; border-radius: 5px; width:auto; " @onclick="() => filterIsVisible = true">
+                                    <ion-icon name="filter-outline" class="mr-2"></ion-icon><h3 style="color:white; font-weight:500">Filter</h3>
+                                </button>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <RepeaterComponent Items="currentLogins">
+                            <Row Context="login">
+                                <tr>
+                                    <td>
+                                        @(currentLogins.IndexOf(login) + 1)
+                                    </td>
+                                    <td>
+                                        @login.FullName
+                                    </td>
+                                    <td>
+                                        @String.Format("{0:dd/MM/yyyy hh:mm:ss tt}", login.SignInDate)
+                                    </td>
+                                    <td style="width: 0;"></td>
+                                </tr>
+                            </Row>
+                        </RepeaterComponent>
+                    </tbody>
+                </table>
+                @if (filterIsVisible)
+                {
+                    <FilterForm currentLogins="currentLogins" returnedLogins="e => { currentLogins = e; filterIsVisible = false; }"></FilterForm>
+                }
+            }
+            else
+            {
+                <div class="page-empty">
+                    <ion-icon name="alert-circle-outline"></ion-icon>
+                    <p>This table contains no login data.</p>
+                </div>
+            }
+        </div>
+        <ul class="number-list" @ref="numberList">
+            <li class="number-list__item number-list__arrow" @onclick="async () => { await IncreaseStartingNumber(-6); }">
+                <ion-icon name="caret-back-outline"></ion-icon>
+            </li>
+            @for (int i = listStartingNumber; i <= listStartingNumber + 5; i++)
+            {
+                var j = i;
+                if (i % 6 == 0)
+                {
+                    <li class="number-list__item list-toggle" @onclick="async () => { await ChangePages(j); }"><h3>@j</h3></li>
+                }
+                else
+                {
+                    <li class="number-list__item" @onclick="async () => { await ChangePages(j); }"><h3>@j</h3></li>
+                }
+
+            }
+            <li class="number-list__item number-list__arrow" @onclick="async () => { await IncreaseStartingNumber(6); }">
+                <ion-icon name="caret-forward-outline"></ion-icon>
+            </li>
+        </ul>
+    </div>
+    
+
+@code {
+    List<Login> currentLogins = new();
+    List<Login> todayLogins;
+    List<Login> lastWeekLogins;
+    List<Login> lastMonthLogins;
+    List<Login> lastYearLogins;
+    List<Login> allLogins;
+
+    ElementReference tabList;
+    ElementReference numberList;
+
+    int listStartingNumber = 0;
+    int pageNumber = 0;
+
+    bool filterIsVisible;
+
+    protected async override Task OnInitializedAsync()
+    {
+        allLogins = await _clientEndpoint.GetSignIns(pageNumber + 1);
+        todayLogins = allLogins.Where<Login>(e => (DateTime.Now.DayOfYear - e.SignInDate.DayOfYear == 0)).ToList();
+
+        lastWeekLogins = allLogins.Where<Login>(e =>
+            ((DateTime.Now.Year - e.SignInDate.Year == 0) && (DateTime.Now.DayOfYear - e.SignInDate.DayOfYear <= 7))
+            ||
+            ((DateTime.Now.Year - e.SignInDate.Year == 1) && (e.SignInDate.DayOfYear - DateTime.Now.DayOfYear >= 359))
+            ||
+            ((DateTime.Now.Year - e.SignInDate.Year == 1) && (e.SignInDate.DayOfYear - DateTime.Now.DayOfYear >= 358) && (e.SignInDate.Year / 4 == 0))
+        ).ToList();
+
+        lastMonthLogins = allLogins.Where<Login>(e => (DateTime.Now.Month - e.SignInDate.Month == 0)).ToList();
+
+        lastYearLogins = allLogins.Where<Login>(e => (DateTime.Now.Year - e.SignInDate.Year == 0)).ToList();
+
+        currentLogins = todayLogins;
+    }
+
+    private async Task ChangeTabs(int n)
+    {
+        await JS.InvokeAsync<string>("listItemToggle", tabList, n);
+        switch (n)
+        {
+            case 0:
+                currentLogins = todayLogins;
+                break;
+            case 1:
+                currentLogins = lastWeekLogins;
+                break;
+            case 2:
+                currentLogins = lastMonthLogins;
+                break;
+            case 3:
+                currentLogins = lastYearLogins;
+                break;
+            case 4:
+                currentLogins = allLogins;
+                break;
+
+            default:
+                break;
+        }
+
+        listStartingNumber = 0;
+        pageNumber = 0;
+        await JS.InvokeAsync<string>("numberListItemToggle", numberList, pageNumber % 6);
+    }
+
+    private async Task ChangePages(int n)
+    {
+        pageNumber = n;
+        await JS.InvokeAsync<string>("numberListItemToggle", numberList, pageNumber % 6);
+        var currentLoginsPage = await _clientEndpoint.GetSignIns(pageNumber + 1);
+        if (currentLoginsPage is not null)
+        {
+            var listNumber = await JS.InvokeAsync<int>("getListNumber", tabList);
+            switch (listNumber)
+            {
+                case 0:
+                    currentLogins = currentLoginsPage.Where<Login>(e => (DateTime.Now.DayOfYear - e.SignInDate.DayOfYear == 0)).ToList();
+                    break;
+                case 1:
+                    currentLogins = currentLoginsPage.Where<Login>(e =>
+                        ((DateTime.Now.Year - e.SignInDate.Year == 0) && (DateTime.Now.DayOfYear - e.SignInDate.DayOfYear <= 7))
+                        ||
+                        ((DateTime.Now.Year - e.SignInDate.Year == 1) && (e.SignInDate.DayOfYear - DateTime.Now.DayOfYear >= 359))
+                        ||
+                        ((DateTime.Now.Year - e.SignInDate.Year == 1) && (e.SignInDate.DayOfYear - DateTime.Now.DayOfYear >= 358) && (e.SignInDate.Year / 4 == 0))
+                    ).ToList();
+                    break;
+                case 2:
+                    currentLogins = currentLoginsPage.Where<Login>(e => (DateTime.Now.Month - e.SignInDate.Month == 0)).ToList();
+                    break;
+                case 3:
+                    currentLogins = currentLoginsPage.Where<Login>(e => (DateTime.Now.Year - e.SignInDate.Year == 0)).ToList();
+                    break;
+                case 4:
+                    currentLogins = currentLoginsPage;
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
+    private async Task IncreaseStartingNumber(int numberToIncrease)
+    {
+        if (listStartingNumber > 5 || numberToIncrease > 0)
+        {
+            listStartingNumber += numberToIncrease;
+            int listStartingNumberFloor = listStartingNumber / 6;
+            int pageNumberFloor = pageNumber / 6;
+
+            if (listStartingNumberFloor == pageNumberFloor)
+            {
+                await JS.InvokeAsync<string>("numberListItemToggle", numberList, pageNumber % 6);
+            }
+            else if (listStartingNumberFloor != pageNumberFloor)
+            {
+                await JS.InvokeAsync<string>("numberListItemToggle", numberList, -1);
+            }
+        }
+    }
+}
